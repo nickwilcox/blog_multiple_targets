@@ -2,18 +2,16 @@
 
 use std::default::Default;
 
-pub type Sample = u16;
-
 #[derive(Default, Copy, Clone)]
 pub struct InterleavedSample71 {
-    fl: Sample,
-    fr: Sample,
-    fc: Sample,
-    lf: Sample,
-    sl: Sample,
-    sr: Sample,
-    rl: Sample,
-    rr: Sample,
+    fl: i16,
+    fr: i16,
+    fc: i16,
+    lf: i16,
+    sl: i16,
+    sr: i16,
+    rl: i16,
+    rr: i16,
 }
 
 pub struct InterleavedBuffer71 {
@@ -30,14 +28,14 @@ impl InterleavedBuffer71 {
 
 pub struct DeinterleavedBuffer71 {
     num_samples: usize,
-    data_fl: Vec<Sample>,
-    data_fr: Vec<Sample>,
-    data_fc: Vec<Sample>,
-    data_lf: Vec<Sample>,
-    data_sl: Vec<Sample>,
-    data_sr: Vec<Sample>,
-    data_rl: Vec<Sample>,
-    data_rr: Vec<Sample>,
+    data_fl: Vec<f32>,
+    data_fr: Vec<f32>,
+    data_fc: Vec<f32>,
+    data_lf: Vec<f32>,
+    data_sl: Vec<f32>,
+    data_sr: Vec<f32>,
+    data_rl: Vec<f32>,
+    data_rr: Vec<f32>,
 }
 
 impl DeinterleavedBuffer71 {
@@ -56,6 +54,19 @@ impl DeinterleavedBuffer71 {
     }
 }
 
+static POS_FLOAT_TO_16_SCALE: f32 = 0x7fff as f32;
+static NEG_FLOAT_TO_16_SCALE: f32 = 0x8000 as f32;
+
+#[inline(always)]
+fn pcm_float_to_16(x: f32) -> i16 {
+    // (if x > 0.0 {
+    //     x * POS_FLOAT_TO_16_SCALE
+    // } else {
+    //     x * NEG_FLOAT_TO_16_SCALE
+    // }) as i16
+    (x * POS_FLOAT_TO_16_SCALE) as i16
+}
+
 #[inline(always)]
 pub fn interleave_71_inner(
     deinterleaved: &DeinterleavedBuffer71,
@@ -72,14 +83,14 @@ pub fn interleave_71_inner(
     let src_rl = &deinterleaved.data_rl[0..num_samples];
     let src_rr = &deinterleaved.data_rr[0..num_samples];
     for i in 0..num_samples {
-        dst[i].fl = src_fl[i];
-        dst[i].fr = src_fr[i];
-        dst[i].fc = src_fc[i];
-        dst[i].lf = src_lf[i];
-        dst[i].sl = src_sl[i];
-        dst[i].sr = src_sr[i];
-        dst[i].rl = src_rl[i];
-        dst[i].rr = src_rr[i];
+        dst[i].fl = pcm_float_to_16(src_fl[i]);
+        dst[i].fr = pcm_float_to_16(src_fr[i]);
+        dst[i].fc = pcm_float_to_16(src_fc[i]);
+        dst[i].lf = pcm_float_to_16(src_lf[i]);
+        dst[i].sl = pcm_float_to_16(src_sl[i]);
+        dst[i].sr = pcm_float_to_16(src_sr[i]);
+        dst[i].rl = pcm_float_to_16(src_rl[i]);
+        dst[i].rr = pcm_float_to_16(src_rr[i]);
     }
 }
 
