@@ -1,0 +1,13 @@
+[package]
+name = "blog_multiple_targets"
+version = "1.0.0"
+authors = ["Nick Wilcox <nick@nickwilcox.com>"]
+edition = "2018"
+
+
+[dev-dependencies]
+criterion = "0.2"
+
+[[bench]]
+name = "benchmark"
+harness = false
