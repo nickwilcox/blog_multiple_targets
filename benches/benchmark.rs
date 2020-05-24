@@ -24,6 +24,10 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("avx2", move |b| {
         b.iter(|| unsafe { interleave_71_avx2(&src, &mut dst) })
     });
+    let (src, mut dst) = prepare_buffer();
+    c.bench_function("avx2 manual", move |b| {
+        b.iter(|| unsafe { interleave_71_manual_avx2(&src, &mut dst) })
+    });
 }
 
 criterion_group!(benches, criterion_benchmark);
