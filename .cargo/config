@@ -1,0 +1,2 @@
+[build]
+#rustflags = ["-C", "no-vectorize-loops"] 
