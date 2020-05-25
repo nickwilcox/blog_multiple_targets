@@ -8,6 +8,9 @@ edition = "2018"
 [dev-dependencies]
 criterion = "0.2"
 
+[dependencies]
+itertools = "0.9"
+
 [[bench]]
 name = "benchmark"
 harness = false

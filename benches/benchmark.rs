@@ -17,6 +17,10 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| interleave_71_inner(&src, &mut dst))
     });
     let (src, mut dst) = prepare_buffer();
+    c.bench_function("scalar itertools", move |b| {
+        b.iter(|| interleave_71_inner_iter_tools(&src, &mut dst))
+    });
+    let (src, mut dst) = prepare_buffer();
     c.bench_function("avx", move |b| {
         b.iter(|| unsafe { interleave_71_avx(&src, &mut dst) })
     });

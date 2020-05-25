@@ -132,6 +132,35 @@ pub fn interleave_71_inner_iter(
     }
 }
 
+use itertools::izip;
+
+#[inline(always)]
+pub fn interleave_71_inner_iter_tools(
+    deinterleaved: &DeinterleavedBuffer71,
+    interleaved: &mut InterleavedBuffer71,
+) {
+    for (dst, fl, fr, fc, lf, sl, sr, rl, rr) in izip!(
+        &mut interleaved.data,
+        &deinterleaved.data_fl,
+        &deinterleaved.data_fr,
+        &deinterleaved.data_fc,
+        &deinterleaved.data_lf,
+        &deinterleaved.data_sl,
+        &deinterleaved.data_sr,
+        &deinterleaved.data_rl,
+        &deinterleaved.data_rr,
+    ) {
+        dst.fl = pcm_float_to_16(*fl);
+        dst.fr = pcm_float_to_16(*fr);
+        dst.fc = pcm_float_to_16(*fc);
+        dst.lf = pcm_float_to_16(*lf);
+        dst.sl = pcm_float_to_16(*sl);
+        dst.sr = pcm_float_to_16(*sr);
+        dst.rl = pcm_float_to_16(*rl);
+        dst.rr = pcm_float_to_16(*rr);
+    }
+}
+
 #[target_feature(enable = "avx")]
 pub unsafe fn interleave_71_avx(
     deinterleaved: &DeinterleavedBuffer71,
