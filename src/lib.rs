@@ -2,6 +2,16 @@
 
 use std::default::Default;
 
+// In the following code we use the following acronyms for conciseness
+// FL - front left
+// FR - front right
+// FC - front center, also just called center
+// LF - low frequency, also called low frequency effects, or sub-woofer
+// SL - surround left
+// SR - surround right
+// RL - rear left
+// RR - read right
+
 #[derive(Default, Copy, Clone, Eq, PartialEq, Debug)]
 pub struct InterleavedSample71 {
     fl: i16,
@@ -55,15 +65,9 @@ impl DeinterleavedBuffer71 {
 }
 
 static POS_FLOAT_TO_16_SCALE: f32 = 0x7fff as f32;
-static NEG_FLOAT_TO_16_SCALE: f32 = 0x8000 as f32;
 
 #[inline(always)]
 fn pcm_float_to_16(x: f32) -> i16 {
-    // (if x > 0.0 {
-    //     x * POS_FLOAT_TO_16_SCALE
-    // } else {
-    //     x * NEG_FLOAT_TO_16_SCALE
-    // }) as i16
     (x * POS_FLOAT_TO_16_SCALE) as i16
 }
 
@@ -91,6 +95,40 @@ pub fn interleave_71_inner(
         dst[i].sr = pcm_float_to_16(src_sr[i]);
         dst[i].rl = pcm_float_to_16(src_rl[i]);
         dst[i].rr = pcm_float_to_16(src_rr[i]);
+    }
+}
+
+#[inline(always)]
+pub fn interleave_71_inner_iter(
+    deinterleaved: &DeinterleavedBuffer71,
+    interleaved: &mut InterleavedBuffer71,
+) {
+    for (dst, (fl, (fr, (fc, (lf, (sl, (sr, (rl, rr)))))))) in interleaved.data.iter_mut().zip(
+        deinterleaved.data_fl.iter().zip(
+            deinterleaved.data_fr.iter().zip(
+                deinterleaved.data_fc.iter().zip(
+                    deinterleaved.data_lf.iter().zip(
+                        deinterleaved.data_sl.iter().zip(
+                            deinterleaved.data_sr.iter().zip(
+                                deinterleaved
+                                    .data_rl
+                                    .iter()
+                                    .zip(deinterleaved.data_rr.iter()),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    ) {
+        dst.fl = pcm_float_to_16(*fl);
+        dst.fr = pcm_float_to_16(*fr);
+        dst.fc = pcm_float_to_16(*fc);
+        dst.lf = pcm_float_to_16(*lf);
+        dst.sl = pcm_float_to_16(*sl);
+        dst.sr = pcm_float_to_16(*sr);
+        dst.rl = pcm_float_to_16(*rl);
+        dst.rr = pcm_float_to_16(*rr);
     }
 }
 
