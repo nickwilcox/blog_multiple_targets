@@ -160,19 +160,37 @@ pub fn interleave_71(deinterleaved: &DeinterleavedBuffer71, interleaved: &mut In
 use std::arch::x86_64::*;
 
 #[inline(always)]
-unsafe fn _mm256_unpacklo_pd_ps(a: __m256, b: __m256) -> __m256 {
-    *(&_mm256_unpacklo_pd(
-        *(&a as *const _ as *const __m256d),
-        *(&b as *const _ as *const __m256d),
-    ) as *const _ as *const __m256)
-}
+pub unsafe fn transpose_and_convert(a: __m256, b: __m256, c: __m256, d: __m256, dst: *mut __m256i) {
+    // keep shuffling individual elements inside the vector around to finish interleaving
+    let unpack_lo_pd_0 =
+        _mm256_castpd_ps(_mm256_unpacklo_pd(_mm256_castps_pd(a), _mm256_castps_pd(b)));
+    let unpack_lo_pd_1 =
+        _mm256_castpd_ps(_mm256_unpacklo_pd(_mm256_castps_pd(c), _mm256_castps_pd(d)));
 
-#[inline(always)]
-unsafe fn _mm256_unpackhi_pd_ps(a: __m256, b: __m256) -> __m256 {
-    *(&_mm256_unpackhi_pd(
-        *(&a as *const _ as *const __m256d),
-        *(&b as *const _ as *const __m256d),
-    ) as *const _ as *const __m256)
+    let unpack_hi_pd_0 =
+        _mm256_castpd_ps(_mm256_unpackhi_pd(_mm256_castps_pd(a), _mm256_castps_pd(b)));
+    let unpack_hi_pd_1 =
+        _mm256_castpd_ps(_mm256_unpackhi_pd(_mm256_castps_pd(c), _mm256_castps_pd(d)));
+
+    let permute_0 = _mm256_permute2f128_ps(unpack_lo_pd_0, unpack_hi_pd_0, 0b_0010_0000);
+    let permute_1 = _mm256_permute2f128_ps(unpack_lo_pd_0, unpack_hi_pd_0, 0b_0011_0001);
+    let permute_2 = _mm256_permute2f128_ps(unpack_lo_pd_1, unpack_hi_pd_1, 0b_0010_0000);
+    let permute_3 = _mm256_permute2f128_ps(unpack_lo_pd_1, unpack_hi_pd_1, 0b_0011_0001);
+
+    // convert all our values from f32 [-1.0, 1.0] to i32 [-32767, 32767]
+    let scale = _mm256_set1_ps(POS_FLOAT_TO_16_SCALE);
+    let i32_0 = _mm256_cvtps_epi32(_mm256_mul_ps(permute_0, scale));
+    let i32_1 = _mm256_cvtps_epi32(_mm256_mul_ps(permute_1, scale));
+    let i32_2 = _mm256_cvtps_epi32(_mm256_mul_ps(permute_2, scale));
+    let i32_3 = _mm256_cvtps_epi32(_mm256_mul_ps(permute_3, scale));
+
+    // convert from i32 to i16
+    let i16_0 = _mm256_packs_epi32(i32_0, i32_2);
+    let i16_1 = _mm256_packs_epi32(i32_1, i32_3);
+
+    // store the destination memory
+    _mm256_storeu_si256(dst.offset(0), i16_0);
+    _mm256_storeu_si256(dst.offset(2), i16_1);
 }
 
 #[target_feature(enable = "avx2")]
@@ -181,7 +199,8 @@ pub unsafe fn interleave_71_manual_avx2(
     interleaved: &mut InterleavedBuffer71,
 ) {
     let num_samples = deinterleaved.num_samples;
-    let _dst_debug = interleaved.data.as_ptr() as *const i16;
+    assert_eq!(interleaved.data.len(), num_samples);
+    assert!(num_samples % 8 == 0);
     let mut dst_base = interleaved.data.as_mut_ptr() as *mut __m256i;
     let mut src_fl_base = deinterleaved.data_fl.as_ptr();
     let mut src_fr_base = deinterleaved.data_fr.as_ptr();
@@ -191,7 +210,6 @@ pub unsafe fn interleave_71_manual_avx2(
     let mut src_sr_base = deinterleaved.data_sr.as_ptr();
     let mut src_rl_base = deinterleaved.data_rl.as_ptr();
     let mut src_rr_base = deinterleaved.data_rr.as_ptr();
-    let scale = _mm256_set1_ps(POS_FLOAT_TO_16_SCALE);
     for _ in 0..num_samples / 8 {
         let src_fl = _mm256_loadu_ps(src_fl_base);
         let src_fr = _mm256_loadu_ps(src_fr_base);
@@ -202,74 +220,20 @@ pub unsafe fn interleave_71_manual_avx2(
         let src_rl = _mm256_loadu_ps(src_rl_base);
         let src_rr = _mm256_loadu_ps(src_rr_base);
 
-        {
-            let unpack_lo_ps_0 = _mm256_unpacklo_ps(src_fl, src_fr);
-            let unpack_lo_ps_1 = _mm256_unpacklo_ps(src_fc, src_lf);
-            let unpack_lo_ps_2 = _mm256_unpacklo_ps(src_sl, src_sr);
-            let unpack_lo_ps_3 = _mm256_unpacklo_ps(src_rl, src_rr);
-
-            {
-                let unpack_lo_pd_0 = _mm256_unpacklo_pd_ps(unpack_lo_ps_0, unpack_lo_ps_1);
-                let unpack_lo_pd_1 = _mm256_unpacklo_pd_ps(unpack_lo_ps_2, unpack_lo_ps_3);
-
-                let unpack_hi_pd_0 = _mm256_unpackhi_pd_ps(unpack_lo_ps_0, unpack_lo_ps_1);
-                let unpack_hi_pd_1 = _mm256_unpackhi_pd_ps(unpack_lo_ps_2, unpack_lo_ps_3);
-
-                let permute_0 =
-                    _mm256_permute2f128_ps(unpack_lo_pd_0, unpack_hi_pd_0, 0b_0010_0000);
-                let permute_1 =
-                    _mm256_permute2f128_ps(unpack_lo_pd_0, unpack_hi_pd_0, 0b_0011_0001);
-                let permute_2 =
-                    _mm256_permute2f128_ps(unpack_lo_pd_1, unpack_hi_pd_1, 0b_0010_0000);
-                let permute_3 =
-                    _mm256_permute2f128_ps(unpack_lo_pd_1, unpack_hi_pd_1, 0b_0011_0001);
-
-                let i32_0 = _mm256_cvtps_epi32(_mm256_mul_ps(permute_0, scale));
-                let i32_1 = _mm256_cvtps_epi32(_mm256_mul_ps(permute_1, scale));
-                let i32_2 = _mm256_cvtps_epi32(_mm256_mul_ps(permute_2, scale));
-                let i32_3 = _mm256_cvtps_epi32(_mm256_mul_ps(permute_3, scale));
-
-                let i16_0 = _mm256_packs_epi32(i32_0, i32_2);
-                let i16_1 = _mm256_packs_epi32(i32_1, i32_3);
-
-                _mm256_storeu_si256(dst_base.offset(0), i16_0);
-                _mm256_storeu_si256(dst_base.offset(2), i16_1);
-            }
-        }
-        {
-            let unpack_hi_ps_0 = _mm256_unpackhi_ps(src_fl, src_fr);
-            let unpack_hi_ps_1 = _mm256_unpackhi_ps(src_fc, src_lf);
-            let unpack_hi_ps_2 = _mm256_unpackhi_ps(src_sl, src_sr);
-            let unpack_hi_ps_3 = _mm256_unpackhi_ps(src_rl, src_rr);
-
-            {
-                let unpack_lo_pd_0 = _mm256_unpacklo_pd_ps(unpack_hi_ps_0, unpack_hi_ps_1);
-                let unpack_lo_pd_1 = _mm256_unpacklo_pd_ps(unpack_hi_ps_2, unpack_hi_ps_3);
-
-                let unpack_hi_pd_0 = _mm256_unpackhi_pd_ps(unpack_hi_ps_0, unpack_hi_ps_1);
-                let unpack_hi_pd_1 = _mm256_unpackhi_pd_ps(unpack_hi_ps_2, unpack_hi_ps_3);
-
-                let permute_0 =
-                    _mm256_permute2f128_ps(unpack_lo_pd_0, unpack_hi_pd_0, 0b_0010_0000);
-                let permute_1 =
-                    _mm256_permute2f128_ps(unpack_lo_pd_0, unpack_hi_pd_0, 0b_0011_0001);
-                let permute_2 =
-                    _mm256_permute2f128_ps(unpack_lo_pd_1, unpack_hi_pd_1, 0b_0010_0000);
-                let permute_3 =
-                    _mm256_permute2f128_ps(unpack_lo_pd_1, unpack_hi_pd_1, 0b_0011_0001);
-
-                let i32_0 = _mm256_cvtps_epi32(_mm256_mul_ps(permute_0, scale));
-                let i32_1 = _mm256_cvtps_epi32(_mm256_mul_ps(permute_1, scale));
-                let i32_2 = _mm256_cvtps_epi32(_mm256_mul_ps(permute_2, scale));
-                let i32_3 = _mm256_cvtps_epi32(_mm256_mul_ps(permute_3, scale));
-
-                let i16_0 = _mm256_packs_epi32(i32_0, i32_2);
-                let i16_1 = _mm256_packs_epi32(i32_1, i32_3);
-
-                _mm256_storeu_si256(dst_base.offset(1), i16_0);
-                _mm256_storeu_si256(dst_base.offset(3), i16_1);
-            }
-        }
+        transpose_and_convert(
+            _mm256_unpacklo_ps(src_fl, src_fr),
+            _mm256_unpacklo_ps(src_fc, src_lf),
+            _mm256_unpacklo_ps(src_sl, src_sr),
+            _mm256_unpacklo_ps(src_rl, src_rr),
+            dst_base,
+        );
+        transpose_and_convert(
+            _mm256_unpackhi_ps(src_fl, src_fr),
+            _mm256_unpackhi_ps(src_fc, src_lf),
+            _mm256_unpackhi_ps(src_sl, src_sr),
+            _mm256_unpackhi_ps(src_rl, src_rr),
+            dst_base.offset(1),
+        );
 
         src_fl_base = src_fl_base.offset(8);
         src_fr_base = src_fr_base.offset(8);
