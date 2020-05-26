@@ -1,3 +1,9 @@
+## TODO
+1. Brief details on PCM Float vs PCM16. Use new types in rust code
+2. use different channels names - back instead of rear
+3. introduction
+4. conclusion
+
 ## Introduction
 
 
@@ -36,10 +42,15 @@ Be aware that this survey largely reflects western gamers and might not capture 
 
 ## The New Sample Workload
 
-** Something about 7.1 interleaving **.
+To test the compiler we're going to use a task a little tougher than the one used in the previous article.
 
+When we store digital audio data with multiple channels, such as stereo with two channels or full surround with eight channels, it can be done two ways. Either interleaved or de-interleaved. De-interleaved means that each channel has it's own slice of memory. Interleaved means the samples are adjacent in memory and there is a single slice of memory.
+
+Interleaved audio is used in audio file formats such as WAV, or when sending audio to output devices. De-interleaved audio is often used when processing audio in memory.
+
+We can get a better understanding if we look at how we would code 7.1 surround sound in the two representations with Rust types:
 ```rust
-// In the following code we use the following acronyms for conciseness
+// In all the following code we use these acronyms for our channel names for conciseness
 // FL - front left
 // FR - front right
 // FC - front center, also just called center
@@ -47,7 +58,9 @@ Be aware that this survey largely reflects western gamers and might not capture 
 // SL - surround left
 // SR - surround right
 // RL - rear left
-// RR - read right
+// RR - rear right
+
+// A single sample
 pub struct InterleavedSample71 {
     fl: i16,
     fr: i16,
@@ -63,7 +76,6 @@ pub struct InterleavedBuffer71 {
     data: Vec<InterleavedSample71>,
 }
 
-
 pub struct DeinterleavedBuffer71 {
     num_samples: usize,
     data_fl: Vec<f32>,
@@ -75,7 +87,13 @@ pub struct DeinterleavedBuffer71 {
     data_rl: Vec<f32>,
     data_rr: Vec<f32>,
 }
+```
 
+You might notice that the interleaved audio represents each channel as a signed 16bit number, while the de-interleaved using floating point. This is again because 16bit is mostly used in storing audio file formats such as WAV, and floating point is used in memory when applying effects or mixing.
+
+The function we're going to explore the compiltation of takes a de-interleaved buffer and transforms it to an interleaved buffer. The basic structure is we loop over the samples and for each one: load, re-arrange, convert from float to 16bit, and then store.
+
+```rust
 static POS_FLOAT_TO_16_SCALE: f32 = 0x7fff as f32;
 
 #[inline(always)]
@@ -120,29 +138,29 @@ If we use those same compiler settings and compile this new function, we can see
 
 ```nasm
 .LBB0_40:
-        movups  xmm0, xmmword ptr [rdx + 4*rax]
-        mulps   xmm0, xmm8
+        movups          xmm0, xmmword ptr [rdx + 4*rax]
+        mulps           xmm0, xmm8
         cvttps2dq       xmm7, xmm0
-        movups  xmm0, xmmword ptr [r9 + 4*rax]
-        mulps   xmm0, xmm8
+        movups          xmm0, xmmword ptr [r9 + 4*rax]
+        mulps           xmm0, xmm8
         cvttps2dq       xmm9, xmm0
-        movups  xmm0, xmmword ptr [r10 + 4*rax]
-        mulps   xmm0, xmm8
+        movups          xmm0, xmmword ptr [r10 + 4*rax]
+        mulps           xmm0, xmm8
         cvttps2dq       xmm13, xmm0
-        movups  xmm0, xmmword ptr [r11 + 4*rax]
-        mulps   xmm0, xmm8
+        movups          xmm0, xmmword ptr [r11 + 4*rax]
+        mulps           xmm0, xmm8
         cvttps2dq       xmm11, xmm0
-        movups  xmm0, xmmword ptr [r14 + 4*rax]
-        mulps   xmm0, xmm8
+        movups          xmm0, xmmword ptr [r14 + 4*rax]
+        mulps           xmm0, xmm8
         cvttps2dq       xmm15, xmm0
-        movups  xmm0, xmmword ptr [r15 + 4*rax]
-        mulps   xmm0, xmm8
+        movups          xmm0, xmmword ptr [r15 + 4*rax]
+        mulps           xmm0, xmm8
         cvttps2dq       xmm10, xmm0
-        movups  xmm0, xmmword ptr [r12 + 4*rax]
-        mulps   xmm0, xmm8
+        movups          xmm0, xmmword ptr [r12 + 4*rax]
+        mulps           xmm0, xmm8
         cvttps2dq       xmm2, xmm0
-        movups  xmm0, xmmword ptr [rbx + 4*rax]
-        mulps   xmm0, xmm8
+        movups          xmm0, xmmword ptr [rbx + 4*rax]
+        mulps           xmm0, xmm8
         cvttps2dq       xmm12, xmm0
 ```
 
@@ -159,20 +177,20 @@ The following is a snippet of compiler output with the arguments `-O -C target-f
 
 ```nasm
 .LBB0_40:
-        vmovaps ymm6, ymmword ptr [rip + .LCPI0_0]
-        vmulps  ymm0, ymm6, ymmword ptr [rdx + 4*rax]
+        vmovaps         ymm6, ymmword ptr [rip + .LCPI0_0]
+        vmulps          ymm0, ymm6, ymmword ptr [rdx + 4*rax]
         vcvttps2dq      ymm0, ymm0
         vextractf128    xmm1, ymm0, 1
         vpackssdw       xmm11, xmm0, xmm1
-        vmulps  ymm0, ymm6, ymmword ptr [r9 + 4*rax]
+        vmulps          ymm0, ymm6, ymmword ptr [r9 + 4*rax]
         vcvttps2dq      ymm0, ymm0
         vextractf128    xmm2, ymm0, 1
-        vmulps  ymm3, ymm6, ymmword ptr [r10 + 4*rax]
+        vmulps          ymm3, ymm6, ymmword ptr [r10 + 4*rax]
         vpackssdw       xmm12, xmm0, xmm2
         vcvttps2dq      ymm0, ymm3
         vextractf128    xmm3, ymm0, 1
         vpackssdw       xmm13, xmm0, xmm3
-        vmulps  ymm0, ymm6, ymmword ptr [r11 + 4*rax]
+        vmulps          ymm0, ymm6, ymmword ptr [r11 + 4*rax]
         vcvttps2dq      ymm0, ymm0
         vextractf128    xmm4, ymm0, 1
         vpackssdw       xmm14, xmm0, xmm4
