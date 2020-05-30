@@ -9,8 +9,8 @@ use std::default::Default;
 // LF - low frequency, also called low frequency effects, or sub-woofer
 // SL - surround left
 // SR - surround right
-// RL - rear left
-// RR - read right
+// BL - back left
+// BR - back right
 
 #[derive(Default, Copy, Clone, Eq, PartialEq, Debug)]
 pub struct InterleavedSample71 {
@@ -20,8 +20,8 @@ pub struct InterleavedSample71 {
     lf: i16,
     sl: i16,
     sr: i16,
-    rl: i16,
-    rr: i16,
+    bl: i16,
+    br: i16,
 }
 
 pub struct InterleavedBuffer71 {
@@ -44,8 +44,8 @@ pub struct DeinterleavedBuffer71 {
     data_lf: Vec<f32>,
     data_sl: Vec<f32>,
     data_sr: Vec<f32>,
-    data_rl: Vec<f32>,
-    data_rr: Vec<f32>,
+    data_bl: Vec<f32>,
+    data_br: Vec<f32>,
 }
 
 impl DeinterleavedBuffer71 {
@@ -58,8 +58,8 @@ impl DeinterleavedBuffer71 {
             data_lf: vec![Default::default(); num_samples],
             data_sl: vec![Default::default(); num_samples],
             data_sr: vec![Default::default(); num_samples],
-            data_rl: vec![Default::default(); num_samples],
-            data_rr: vec![Default::default(); num_samples],
+            data_bl: vec![Default::default(); num_samples],
+            data_br: vec![Default::default(); num_samples],
         }
     }
 }
@@ -84,8 +84,8 @@ pub fn interleave_71_inner(
     let src_lf = &deinterleaved.data_lf[0..num_samples];
     let src_sl = &deinterleaved.data_sl[0..num_samples];
     let src_sr = &deinterleaved.data_sr[0..num_samples];
-    let src_rl = &deinterleaved.data_rl[0..num_samples];
-    let src_rr = &deinterleaved.data_rr[0..num_samples];
+    let src_bl = &deinterleaved.data_bl[0..num_samples];
+    let src_br = &deinterleaved.data_br[0..num_samples];
     for i in 0..num_samples {
         dst[i].fl = pcm_float_to_16(src_fl[i]);
         dst[i].fr = pcm_float_to_16(src_fr[i]);
@@ -93,17 +93,18 @@ pub fn interleave_71_inner(
         dst[i].lf = pcm_float_to_16(src_lf[i]);
         dst[i].sl = pcm_float_to_16(src_sl[i]);
         dst[i].sr = pcm_float_to_16(src_sr[i]);
-        dst[i].rl = pcm_float_to_16(src_rl[i]);
-        dst[i].rr = pcm_float_to_16(src_rr[i]);
+        dst[i].bl = pcm_float_to_16(src_bl[i]);
+        dst[i].br = pcm_float_to_16(src_br[i]);
     }
 }
 
+// Not used in the article - to ugly
 #[inline(always)]
 pub fn interleave_71_inner_iter(
     deinterleaved: &DeinterleavedBuffer71,
     interleaved: &mut InterleavedBuffer71,
 ) {
-    for (dst, (fl, (fr, (fc, (lf, (sl, (sr, (rl, rr)))))))) in interleaved.data.iter_mut().zip(
+    for (dst, (fl, (fr, (fc, (lf, (sl, (sr, (bl, br)))))))) in interleaved.data.iter_mut().zip(
         deinterleaved.data_fl.iter().zip(
             deinterleaved.data_fr.iter().zip(
                 deinterleaved.data_fc.iter().zip(
@@ -111,9 +112,9 @@ pub fn interleave_71_inner_iter(
                         deinterleaved.data_sl.iter().zip(
                             deinterleaved.data_sr.iter().zip(
                                 deinterleaved
-                                    .data_rl
+                                    .data_bl
                                     .iter()
-                                    .zip(deinterleaved.data_rr.iter()),
+                                    .zip(deinterleaved.data_br.iter()),
                             ),
                         ),
                     ),
@@ -127,19 +128,20 @@ pub fn interleave_71_inner_iter(
         dst.lf = pcm_float_to_16(*lf);
         dst.sl = pcm_float_to_16(*sl);
         dst.sr = pcm_float_to_16(*sr);
-        dst.rl = pcm_float_to_16(*rl);
-        dst.rr = pcm_float_to_16(*rr);
+        dst.bl = pcm_float_to_16(*bl);
+        dst.br = pcm_float_to_16(*br);
     }
 }
 
-use itertools::izip;
-
+// Not used in the article - godbolt doesn't support izip
 #[inline(always)]
 pub fn interleave_71_inner_iter_tools(
     deinterleaved: &DeinterleavedBuffer71,
     interleaved: &mut InterleavedBuffer71,
 ) {
-    for (dst, fl, fr, fc, lf, sl, sr, rl, rr) in izip!(
+    use itertools::izip;
+
+    for (dst, fl, fr, fc, lf, sl, sr, bl, br) in izip!(
         &mut interleaved.data,
         &deinterleaved.data_fl,
         &deinterleaved.data_fr,
@@ -147,8 +149,8 @@ pub fn interleave_71_inner_iter_tools(
         &deinterleaved.data_lf,
         &deinterleaved.data_sl,
         &deinterleaved.data_sr,
-        &deinterleaved.data_rl,
-        &deinterleaved.data_rr,
+        &deinterleaved.data_bl,
+        &deinterleaved.data_br,
     ) {
         dst.fl = pcm_float_to_16(*fl);
         dst.fr = pcm_float_to_16(*fr);
@@ -156,8 +158,8 @@ pub fn interleave_71_inner_iter_tools(
         dst.lf = pcm_float_to_16(*lf);
         dst.sl = pcm_float_to_16(*sl);
         dst.sr = pcm_float_to_16(*sr);
-        dst.rl = pcm_float_to_16(*rl);
-        dst.rr = pcm_float_to_16(*rr);
+        dst.bl = pcm_float_to_16(*bl);
+        dst.br = pcm_float_to_16(*br);
     }
 }
 
@@ -186,6 +188,7 @@ pub fn interleave_71(deinterleaved: &DeinterleavedBuffer71, interleaved: &mut In
         interleave_71_inner(deinterleaved, interleaved)
     }
 }
+
 use std::arch::x86_64::*;
 
 #[inline(always)]
@@ -217,7 +220,7 @@ pub unsafe fn transpose_and_convert(a: __m256, b: __m256, c: __m256, d: __m256, 
     let i16_0 = _mm256_packs_epi32(i32_0, i32_2);
     let i16_1 = _mm256_packs_epi32(i32_1, i32_3);
 
-    // store the destination memory
+    // store to destination memory
     _mm256_storeu_si256(dst.offset(0), i16_0);
     _mm256_storeu_si256(dst.offset(2), i16_1);
 }
@@ -237,8 +240,8 @@ pub unsafe fn interleave_71_manual_avx2(
     let mut src_lf_base = deinterleaved.data_lf.as_ptr();
     let mut src_sl_base = deinterleaved.data_sl.as_ptr();
     let mut src_sr_base = deinterleaved.data_sr.as_ptr();
-    let mut src_rl_base = deinterleaved.data_rl.as_ptr();
-    let mut src_rr_base = deinterleaved.data_rr.as_ptr();
+    let mut src_bl_base = deinterleaved.data_bl.as_ptr();
+    let mut src_br_base = deinterleaved.data_br.as_ptr();
     for _ in 0..num_samples / 8 {
         let src_fl = _mm256_loadu_ps(src_fl_base);
         let src_fr = _mm256_loadu_ps(src_fr_base);
@@ -246,21 +249,21 @@ pub unsafe fn interleave_71_manual_avx2(
         let src_lf = _mm256_loadu_ps(src_lf_base);
         let src_sl = _mm256_loadu_ps(src_sl_base);
         let src_sr = _mm256_loadu_ps(src_sr_base);
-        let src_rl = _mm256_loadu_ps(src_rl_base);
-        let src_rr = _mm256_loadu_ps(src_rr_base);
+        let src_bl = _mm256_loadu_ps(src_bl_base);
+        let src_br = _mm256_loadu_ps(src_br_base);
 
         transpose_and_convert(
             _mm256_unpacklo_ps(src_fl, src_fr),
             _mm256_unpacklo_ps(src_fc, src_lf),
             _mm256_unpacklo_ps(src_sl, src_sr),
-            _mm256_unpacklo_ps(src_rl, src_rr),
+            _mm256_unpacklo_ps(src_bl, src_br),
             dst_base,
         );
         transpose_and_convert(
             _mm256_unpackhi_ps(src_fl, src_fr),
             _mm256_unpackhi_ps(src_fc, src_lf),
             _mm256_unpackhi_ps(src_sl, src_sr),
-            _mm256_unpackhi_ps(src_rl, src_rr),
+            _mm256_unpackhi_ps(src_bl, src_br),
             dst_base.offset(1),
         );
 
@@ -270,8 +273,8 @@ pub unsafe fn interleave_71_manual_avx2(
         src_lf_base = src_lf_base.offset(8);
         src_sl_base = src_sl_base.offset(8);
         src_sr_base = src_sr_base.offset(8);
-        src_rl_base = src_rl_base.offset(8);
-        src_rr_base = src_rr_base.offset(8);
+        src_bl_base = src_bl_base.offset(8);
+        src_br_base = src_br_base.offset(8);
         dst_base = dst_base.offset(4);
     }
 }
@@ -282,9 +285,56 @@ mod tests {
 
     fn test_data(start: usize, count: usize) -> Vec<f32> {
         (0..count)
-            .map(|i| (i * count + start) as f32 / POS_FLOAT_TO_16_SCALE)
+            .map(|i| (i * 8 + start) as f32 / POS_FLOAT_TO_16_SCALE)
             .collect()
     }
+
+    #[test]
+    fn reference() {
+        let samples = 2;
+        let mut interleaved = InterleavedBuffer71::empty(samples);
+        let deinterleaved = DeinterleavedBuffer71 {
+            num_samples: samples,
+            data_fl: test_data(0, samples),
+            data_fr: test_data(1, samples),
+            data_fc: test_data(2, samples),
+            data_lf: test_data(3, samples),
+            data_sl: test_data(4, samples),
+            data_sr: test_data(5, samples),
+            data_bl: test_data(6, samples),
+            data_br: test_data(7, samples),
+        };
+        interleave_71_inner(&deinterleaved, &mut interleaved);
+        let expected = InterleavedBuffer71 {
+            data: vec![
+                InterleavedSample71 {
+                    fl: 0,
+                    fr: 1,
+                    fc: 2,
+                    lf: 3,
+                    sl: 4,
+                    sr: 5,
+                    bl: 6,
+                    br: 7,
+                },
+                InterleavedSample71 {
+                    fl: 8,
+                    fr: 9,
+                    fc: 10,
+                    lf: 11,
+                    sl: 12,
+                    sr: 13,
+                    bl: 14,
+                    br: 15,
+                },
+            ],
+        };
+
+        for (expected, actual) in expected.data.iter().zip(interleaved.data.iter()) {
+            assert_eq!(expected, actual);
+        }
+    }
+
     #[test]
     fn manual_avx2_vs_reference() {
         let samples = 8 * 8;
@@ -298,8 +348,8 @@ mod tests {
             data_lf: test_data(3, samples),
             data_sl: test_data(4, samples),
             data_sr: test_data(5, samples),
-            data_rl: test_data(6, samples),
-            data_rr: test_data(7, samples),
+            data_bl: test_data(6, samples),
+            data_br: test_data(7, samples),
         };
         unsafe {
             interleave_71_manual_avx2(&deinterleaved, &mut interleaved_avx2);
